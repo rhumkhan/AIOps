@@ -1,0 +1,37 @@
+# Telemetry Contract (v0.1, draft)
+
+The agreement between the AIOps platform and every monitored application.
+Platform code never contains app-specific logic; that lives in registry/.
+
+## Required endpoints
+| Endpoint | Format | Purpose |
+|---|---|---|
+| GET /metrics | Prometheus text | Numbers over time |
+| GET /health | JSON | Is the app alive and are its dependencies okay |
+| GET /ops/events?since=<time> (optional) | JSON list | Discrete events |
+
+## Canonical metrics
+| Name | Meaning | Unit |
+|---|---|---|
+| up | Did the scrape succeed (set by the platform) | 0 or 1 |
+| latency_seconds | Request or operation duration | seconds |
+| error_rate | Failed requests / total requests | 0 to 1 |
+| request_rate | Requests per second | per second |
+| cpu_percent | Process CPU use | 0 to 100 |
+| memory_bytes | Process memory | bytes |
+| freshness_seconds | Age of the latest output or data | seconds |
+
+## Health response
+{"status": "ok", "service": "name", "version": "1.0.0",
+ "uptime_seconds": 5231, "checks": {"model_file": {"ok": true}}}
+
+## Event format (required: timestamp, service, component, event, status)
+{"timestamp": "2026-10-13T12:30:10Z", "service": "sentinel-pipeline",
+ "component": "data_source", "event": "fetch_completed", "status": "ok",
+ "source": "acled", "duration_s": 4.2}
+
+## Rules
+- All metrics carry a service label. Timestamps are UTC ISO 8601.
+- Required: /health and request_rate, error_rate, latency_seconds (or an adapter).
+- Optional: events, CPU and memory, freshness, dependencies.
+- Every contract change is recorded in docs/decision-log.md.

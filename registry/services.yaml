@@ -1,0 +1,38 @@
+# AIOps Service Registry
+# ---------------------------------------------------------------------------
+# Each entry declares one monitored application.
+# Rules:
+#   - base_url uses ${ENV_VAR} syntax; the collector resolves it at runtime.
+#   - metric_names must match the canonical names in docs/telemetry-contract.md.
+#   - scrape_interval_seconds is a hint; the collector enforces the minimum.
+#   - Add a new block for every new service. Never put app logic here.
+# ---------------------------------------------------------------------------
+
+services:
+
+  - name: sentinel
+    description: "Sentinel pipeline — anomaly-detection service being monitored."
+    base_url: "${SENTINEL_URL}"          # e.g. http://localhost:8000 or http://sentinel:8000
+    scrape_interval_seconds: 30
+
+    endpoints:
+      metrics: "/metrics"               # Prometheus text format
+      health:  "/health"                # JSON health response
+      events:  "/ops/events"            # JSON event list (optional)
+
+    # Canonical metric names this service exposes (from telemetry-contract.md).
+    # The collector will only store metrics whose names appear here.
+    # Add or remove names as Sentinel's instrumentation evolves.
+    metric_names:
+      - up                              # did the scrape succeed (set by platform)
+      - request_rate                    # requests per second
+      - error_rate                      # failed / total  (0–1)
+      - latency_seconds                 # request duration
+      - cpu_percent                     # process CPU (0–100)
+      - memory_bytes                    # process memory in bytes
+      - freshness_seconds               # age of latest output
+
+    # Labels that identify this service in every stored metric row.
+    default_labels:
+      service: sentinel
+      env: "${ENV_NAME}"               # e.g. development, staging, production

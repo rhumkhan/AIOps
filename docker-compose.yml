@@ -1,0 +1,28 @@
+services:
+  # ── PostgreSQL database ────────────────────────────────
+  db:
+    image: postgres:16
+    env_file: .env                  # reads POSTGRES_USER, _PASSWORD, _DB
+    ports:
+      - "5432:5432"                 # host:container — lets local tools connect
+    volumes:
+      - postgres-data:/var/lib/postgresql/data          # persist data across restarts
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro   # run DDL on first boot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI application ────────────────────────────────
+  api:
+    build: ./api
+    env_file: .env                  # reads DATABASE_URL
+    ports:
+      - "8000:8000"                 # host:container — API accessible at localhost:8000
+    depends_on:
+      db:
+        condition: service_healthy  # wait until Postgres passes pg_isready
+
+volumes:
+  postgres-data:                    # named volume — survives docker compose down

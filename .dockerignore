@@ -1,0 +1,20 @@
+.git
+.gitignore
+.env
+.env.example
+.venv
+venv
+__pycache__
+*.py[cod]
+
+# Docs and config not needed inside containers
+docs/
+registry/
+scenarios/
+tests/
+*.md
+LICENSE
+
+# IDE
+.vscode/
+.idea/
