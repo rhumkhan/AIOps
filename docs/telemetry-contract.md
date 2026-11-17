@@ -1,4 +1,4 @@
-# Telemetry Contract (v0.1, draft)
+# Telemetry Contract (v0.2)
 
 The agreement between the AIOps platform and every monitored application.
 Platform code never contains app-specific logic; that lives in registry/.
@@ -9,6 +9,38 @@ Platform code never contains app-specific logic; that lives in registry/.
 | GET /metrics | Prometheus text | Numbers over time |
 | GET /health | JSON | Is the app alive and are its dependencies okay |
 | GET /ops/events?since=<time> (optional) | JSON list | Discrete events |
+
+## OpenTelemetry push ingestion
+
+The AIOps API accepts OTLP/HTTP protobuf batches at:
+
+| Endpoint | Signal |
+|---|---|
+| POST /v1/traces | Traces/spans |
+| POST /v1/metrics | Metrics/data points |
+| POST /v1/logs | Logs/log records |
+
+Send `Content-Type: application/x-protobuf` and configure the source exporter
+to use `http/protobuf`. The default request body limit is 64 MiB; compressed
+requests are not accepted yet. The API stores each accepted request body
+losslessly in `otel_payloads`, along with the signal, receive time, record
+count, resource attributes, and `service.name` values. Raw payloads are kept
+alongside signal-specific normalized records where implemented.
+
+Every source should set the OpenTelemetry resource attribute `service.name`
+to its registered service name. For an app in the same Compose network, the
+OTLP base endpoint is `http://api:8000`. For a source running on the host,
+use `http://localhost:4318` (the Compose host port). With one base endpoint,
+OTLP/HTTP exporters append `/v1/traces`, `/v1/metrics`, and `/v1/logs`.
+
+OTLP log records from registered services are normalized into the `logs` table
+with their source timestamp, severity, message, resource attributes, log
+attributes, and trace/span identifiers when present. The service registry may
+define `log_rules` over recent severity levels and an optional case-insensitive
+message substring. A rule opens an incident only after its configured
+occurrence count is reached within the lookback window; matching records are
+attached as evidence. A log match is evidence of the reported event, not proof
+of root cause or user impact.
 
 ## Canonical metrics
 | Name | Meaning | Unit |

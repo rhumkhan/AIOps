@@ -8,6 +8,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data          # persist data across restarts
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro   # run DDL on first boot
+      - ./db/migrations:/migrations:ro                    # manual schema upgrades for existing volumes
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -20,9 +21,43 @@ services:
     env_file: .env                  # reads DATABASE_URL
     ports:
       - "8000:8000"                 # host:container — API accessible at localhost:8000
+      - "4318:8000"                 # OTLP/HTTP ingestion (traces, metrics, logs)
     depends_on:
       db:
         condition: service_healthy  # wait until Postgres passes pg_isready
 
+  # Opt in after setting SENTINEL_URL to an address reachable from Docker.
+  collector:
+    profiles: ["collector"]
+    build: ./collector
+    env_file: .env
+    environment:
+      REGISTRY_PATH: /app/registry/services.yaml
+    volumes:
+      - ./registry:/app/registry:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Optional file tailer for Sentinel logs already mounted on the host.
+  sentinel-log-forwarder:
+    profiles: ["sentinel-logs"]
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    user: "0:0"
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - type: bind
+        source: ${SENTINEL_LOGS_DIR:?Set SENTINEL_LOGS_DIR in .env}
+        target: /var/log/sentinel
+        read_only: true
+      - ./otel/collector-logs.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - otel-log-state:/var/lib/otelcol/storage
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
+  otel-log-state:
   postgres-data:                    # named volume — survives docker compose down

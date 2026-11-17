@@ -57,6 +57,29 @@ COMMENT ON COLUMN metrics.labels        IS 'Prometheus label key-value pairs sto
 COMMENT ON COLUMN metrics.collected_at  IS 'Scrape timestamp (platform clock, not the app clock).';
 
 
+-- Raw OTLP request batches are retained losslessly. Signal-specific parsing
+-- and derived/query-friendly records are separate processing stages.
+CREATE TABLE otel_payloads (
+    id              BIGSERIAL       PRIMARY KEY,
+    signal          TEXT            NOT NULL CHECK (signal IN ('traces', 'metrics', 'logs')),
+    content_type    TEXT            NOT NULL,
+    payload         BYTEA           NOT NULL,
+    payload_sha256  CHAR(64)        NOT NULL,
+    resources       JSONB           NOT NULL DEFAULT '[]',
+    service_names   TEXT[]          NOT NULL DEFAULT '{}',
+    record_count    INTEGER         NOT NULL CHECK (record_count >= 0),
+    received_at     TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_otel_payloads_signal_time ON otel_payloads (signal, received_at);
+CREATE INDEX idx_otel_payloads_service_names ON otel_payloads USING GIN (service_names);
+CREATE INDEX idx_otel_payloads_resources ON otel_payloads USING GIN (resources);
+
+COMMENT ON TABLE otel_payloads IS 'Lossless raw OTLP/HTTP protobuf batches, before normalization or incident analysis.';
+COMMENT ON COLUMN otel_payloads.service_names IS 'service.name values extracted from each batch resource for lookup.';
+COMMENT ON COLUMN otel_payloads.record_count IS 'Spans, metric data points, or log records in the batch.';
+
+
 -- ── 3. logs ─────────────────────────────────────────────
 -- Raw log / event entries received as JSON from monitored services.
 -- Two timestamps: occurred_at (when the app says it happened) vs.
@@ -95,6 +118,10 @@ CREATE TABLE incidents (
     service_id      INTEGER         NOT NULL REFERENCES services (id),
     title           TEXT            NOT NULL,            -- short summary, e.g. "CPU > 90 % for 5 min"
     description     TEXT,                                -- longer explanation with evidence
+    probable_root_cause TEXT,                             -- hypothesis grounded in available evidence
+    impact_assessment   TEXT,                             -- likely user impact if unresolved
+    recommended_action  TEXT,                             -- human-reviewed next step
+    evidence        JSONB           NOT NULL DEFAULT '{}', -- observations that support the incident
     severity        TEXT            NOT NULL
                                    CHECK (severity IN ('critical', 'high', 'medium', 'low')),
     status          TEXT            NOT NULL DEFAULT 'open'

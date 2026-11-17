@@ -47,6 +47,16 @@ starts by reading this file.
 
 - AIOps is the main project. Do not suggest changes to any other
   application.
+- The platform's core outcome is to detect issues in connected services,
+  create evidence-backed incidents with a probable root cause, estimate
+  likely user impact if an issue remains unresolved, and notify DevOps
+  with a recommended action.
+- State impact estimates as risk based on available telemetry and trends,
+  never as certainty. Coverage depends on the signals each service exposes
+  or sends to the platform; do not claim the platform detects unobserved
+  issues.
+- Build and evaluate threshold-based detection before adding ML, RAG, or
+  LLM diagnosis. Keep remediation human-approved and auditable.
 
 ## Session protocol
 

@@ -1,0 +1,73 @@
+extensions:
+  file_storage:
+    directory: /var/lib/otelcol/storage
+
+receivers:
+  file_log/sentinel:
+    include:
+      - /var/log/sentinel/sentinel_*.log
+    exclude_older_than: 168h
+    start_at: beginning
+    storage: file_storage
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: regex_parser
+        regex: '^(?P<log_timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*\[(?P<log_level>DEBUG|INFO|WARNING|ERROR|CRITICAL|FATAL)\s*\].*'
+        timestamp:
+          parse_from: attributes.log_timestamp
+          layout_type: strptime
+          layout: '%Y-%m-%d %H:%M:%S'
+        severity:
+          parse_from: attributes.log_level
+          mapping:
+            debug: DEBUG
+            info: INFO
+            warn: WARNING
+            error: ERROR
+            fatal: [CRITICAL, FATAL]
+    resource:
+      service.name: sentinel
+      service.namespace: monitored-services
+
+  file_log/sentinel_ops:
+    include:
+      - /var/log/sentinel/ops_events_*.jsonl
+    exclude_older_than: 168h
+    start_at: beginning
+    storage: file_storage
+    include_file_name: true
+    include_file_path: true
+    operators:
+      - type: json_parser
+        timestamp:
+          parse_from: attributes.timestamp
+          layout_type: gotime
+          layout: '2006-01-02T15:04:05.999999999Z07:00'
+        severity:
+          parse_from: attributes.status
+          mapping:
+            debug: [debug]
+            info: [ok, success, completed, started, running]
+            warn: [warn, warning, degraded]
+            error: [error, failed, failure]
+            fatal: [critical, fatal]
+    resource:
+      service.name: sentinel
+      service.namespace: monitored-services
+
+processors:
+  batch:
+
+exporters:
+  otlp_http/aiops:
+    endpoint: http://api:8000
+    compression: none
+
+service:
+  extensions: [file_storage]
+  pipelines:
+    logs:
+      receivers: [file_log/sentinel, file_log/sentinel_ops]
+      processors: [batch]
+      exporters: [otlp_http/aiops]

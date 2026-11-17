@@ -1,6 +1,30 @@
 # Scenarios (Fault Injection)
 
-> **Status: planned — no code yet.**
+> **Status: a controlled log-rule demo is implemented; application fault scenarios remain planned.**
+
+## Controlled log-rule demo
+
+`send_log_rule_demo.py` sends three clearly marked synthetic ERROR records to
+the AIOps OTLP API for the registered `sentinel` service. It does not modify or
+fault Sentinel. The records carry `aiops.demo=true` and a run ID so they are
+easy to identify in the logs and incident evidence. When the collector sees
+the records, Sentinel's configured three-errors-in-five-minutes rule should
+open an incident. The incident should resolve after those records leave the
+five-minute window, provided no other matching errors arrive.
+
+With AIOps and Sentinel running and Sentinel registered by the collector:
+
+```powershell
+docker compose cp ./scenarios/send_log_rule_demo.py api:/tmp/send_log_rule_demo.py
+docker compose exec api python /tmp/send_log_rule_demo.py
+```
+
+If a `threshold_log_repeated_errors` incident is already open, wait for it to
+resolve before running the script; otherwise the new records update that
+incident's evidence instead of opening a separate one.
+
+The script only emits telemetry. It does not write a `fault_labels` row because
+the monitored application itself was not faulted.
 
 ## What this will do
 

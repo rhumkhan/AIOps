@@ -18,19 +18,66 @@ services:
     endpoints:
       metrics: "/metrics"               # Prometheus text format
       health:  "/health"                # JSON health response
-      events:  "/ops/events"            # JSON event list (optional)
 
-    # Canonical metric names this service exposes (from telemetry-contract.md).
-    # The collector will only store metrics whose names appear here.
-    # Add or remove names as Sentinel's instrumentation evolves.
+    # Raw Prometheus sample names this service currently exposes.
+    # The collector stores only samples whose names appear here.
+    # Keep source names intact in raw storage; normalize them in a later
+    # derived-telemetry stage when their semantics are known.
     metric_names:
       - up                              # did the scrape succeed (set by platform)
-      - request_rate                    # requests per second
-      - error_rate                      # failed / total  (0–1)
-      - latency_seconds                 # request duration
-      - cpu_percent                     # process CPU (0–100)
-      - memory_bytes                    # process memory in bytes
-      - freshness_seconds               # age of latest output
+      - sentinel_info
+      - sentinel_ops_errors_total
+      - sentinel_ops_events_total
+      - sentinel_pipeline_runs_total
+      - sentinel_pipeline_stage_total
+      - sentinel_source_fetch_total
+      - sentinel_source_fallback_served
+      - sentinel_source_records_last
+      - sentinel_uptime_seconds
+      - sentinel_pipeline_stage_duration_seconds_count
+      - sentinel_pipeline_stage_duration_seconds_sum
+      - sentinel_source_fetch_duration_seconds_count
+      - sentinel_source_fetch_duration_seconds_sum
+
+    # This is a rule definition, not platform logic. The collector compares
+    # counter samples within the lookback and raises one incident per rule.
+    metric_rules:
+      - name: operational_errors
+        metric: sentinel_ops_errors_total
+        detection: increase
+        lookback_seconds: 300
+        threshold: 0
+        severity: medium
+        title: Sentinel operational errors increased
+        probable_root_cause: >-
+          The service reported new operational errors. This counter alone does not
+          identify the failing stage, dependency, or source.
+        impact_assessment: >-
+          If errors persist, affected pipeline operations may fail or produce stale
+          results. This metric alone does not confirm user impact; correlate it with
+          pipeline run and freshness signals.
+        recommended_action: >-
+          Review recent error events and logs, identify the affected pipeline stage
+          or source, and check its dependencies before choosing a remediation.
+
+    # Open one incident when errors repeat in a recent time window. Warnings
+    # alone do not trigger this rule; the configured guidance remains a hypothesis.
+    log_rules:
+      - name: repeated_errors
+        levels: [ERROR, FATAL]
+        lookback_seconds: 300
+        min_occurrences: 3
+        severity: medium
+        title: Sentinel is reporting repeated errors
+        probable_root_cause: >-
+          A pipeline operation or dependency may be failing repeatedly. The matching
+          log messages provide clues, but the count alone does not prove the cause.
+        impact_assessment: >-
+          If these errors continue, affected pipeline operations may fail or outputs
+          may become delayed or incomplete. User impact is unconfirmed by these logs alone.
+        recommended_action: >-
+          Review the included error records, identify the affected component and source,
+          correlate with recent metrics, and verify whether a later pipeline run succeeded.
 
     # Labels that identify this service in every stored metric row.
     default_labels:
